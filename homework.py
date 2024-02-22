@@ -84,7 +84,7 @@ def send_message(bot, message):
         logger.debug(START_SEND_MESSAGE)
         bot.send_message(**send_message_params)
         logger.debug(SEND_MESSAGE.format(
-            status=SUCCESS_MESSAGE), message=message)
+            status=SUCCESS_MESSAGE, message=message))
     except telegram.TelegramError as error:
         raise telegram.error.BadRequest(SEND_MESSAGE.format(
             status=ERROR_MESSAGE.format
