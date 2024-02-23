@@ -57,6 +57,7 @@ def check_tokens():
     if unavailable_tokens:
         message = TOKEN_ERROR_MESSAGE.format(", ".join(unavailable_tokens))
         logger.critical(message)
+        raise EnvironmentError(message)
 
 
 def send_message(bot, message):
@@ -195,12 +196,13 @@ def main():
                 message = parse_status(homeworks[0])
             else:
                 logger.debug(NO_UPDATES_MESSAGE)
+                message = NO_UPDATES_MESSAGE
         except Exception as error:
             response = None
             message = ERROR_PROGRAMM_MESSAGE.format(error)
             logger.error(message)
         try:
-            if message and message != last_message:
+            if message != last_message:
                 send_message(bot, message)
                 last_message = message
                 if response:
