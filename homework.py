@@ -198,18 +198,17 @@ def main():
             homeworks = response['homeworks']
             if homeworks:
                 message = parse_status(homeworks[0])
+                if message != last_message and send_message(bot, message):
+                    last_message = message
+                    timestamp = response.get('current_date', timestamp)
             else:
                 logger.debug(NO_UPDATES_MESSAGE)
         except Exception as error:
-            response = {}
             message = ERROR_PROGRAMM_MESSAGE.format(error)
-            logger.error(message)
-        finally:
-            if message != last_message:
-                if send_message(bot, message):
-                    last_message = message
-                    timestamp = response.get('current_date', timestamp)
-            time.sleep(RETRY_PERIOD)
+            logger.error(message, exc_info=True)
+            if message != last_message and send_message(bot, message):
+                last_message = message
+        time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
