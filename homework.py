@@ -57,7 +57,6 @@ def check_tokens():
     if unavailable_tokens:
         message = TOKEN_ERROR_MESSAGE.format(", ".join(unavailable_tokens))
         logger.critical(message)
-        raise EnvironmentError(message)
 
 
 def send_message(bot, message):
