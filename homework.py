@@ -8,7 +8,7 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from exceptions import HTTPError
+from exceptions import WrongResponse
 
 # Настройка логгирования
 logger = logging.getLogger(__name__)
@@ -35,11 +35,15 @@ TELEGRAM_MESSAGE = 'Изменился статус проверки работ�
 START_SEND_MESSAGE = 'Начало отправки сообщения'
 SUCCESS_SEND_MESSAGE = 'Успешная отправка сообщения: {}'
 SEND_MESSAGE_ERROR = 'Ошибка отправки сообщения {message} Ошибка: {error}'
-ERROR_MESSAGE = 'Ошибка: {error}. Параметры: {params}'
+REQUEST_ERROR = 'Ошибка при доступе к эндпоинту: {error}. Параметры: {params}'
+UNEXPECTED_STATUS_CODE = 'Некорректный статут код: {code}. Параметры: {params}'
+ERROR_MESSAGE = ('Ошибка в ответе от сервера: {key}: {value}. '
+                 'Параметры: {params}')
 REQUEST_API_MESSAGE = 'Запрос к эндпоинту API-сервиса.'
 CHECK_RESPONSE_MESSAGE = 'Иницилизация проверки ответа сервера'
 TYPE_ERROR_MESSAGE = 'Ожидаемый тип {object}: {expected_type}. Тип: {type}'
 KEY_ERROR_MESSAGE = 'Словарь: {dict} не содержит ключ: {key}'
+UNEXPECTED_STATUS = 'Неожиданный статус домашней работы: {}'
 PARSE_STATUS_MESSAGE = 'Извлечение статуса домашней работы'
 NO_UPDATES_MESSAGE = 'Обновлений нет'
 ERROR_PROGRAMM_MESSAGE = 'Сбой в работе программы: {}'
@@ -55,7 +59,7 @@ def check_tokens():
     unavailable_tokens = [
         token for token in TOKEN_NAMES if not globals().get(token)]
     if unavailable_tokens:
-        message = TOKEN_ERROR_MESSAGE.format(", ".join(unavailable_tokens))
+        message = TOKEN_ERROR_MESSAGE.format(unavailable_tokens)
         logger.critical(message)
         raise EnvironmentError(message)
 
@@ -68,17 +72,18 @@ def send_message(bot, message):
         bot: Объект бота Telegram.
         message: Сообщение для отправки.
 
-    Raises:
-        ConnectionError: Если не удалось отправить сообщение.
+    Returns:
+        str: Сообщение, в случае его успешной отправки
     """
     try:
         logger.debug(START_SEND_MESSAGE)
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+        sent_message = bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logger.debug(SUCCESS_SEND_MESSAGE.format(message))
+        return sent_message
     except telegram.TelegramError as error:
-        raise ConnectionError(SEND_MESSAGE_ERROR.format(
+        logger.error(SEND_MESSAGE_ERROR.format(
             message=message, error=error
-        ))
+        ), exc_info=True)
 
 
 def get_api_answer(timestamp):
@@ -93,8 +98,7 @@ def get_api_answer(timestamp):
 
     Raises:
         ConnectionError: Ошибка при доступе к эндпоинту.
-        HTTPError: Если получен некорректный HTTP-ответ.
-        ValueError: При наличии в ответе нежелательных ключей
+        WrongResponse: Если получен некорректный HTTP-ответ.
     """
     request_params = {
         'url': ENDPOINT,
@@ -105,16 +109,16 @@ def get_api_answer(timestamp):
         logger.debug(REQUEST_API_MESSAGE)
         response = requests.get(**request_params)
     except requests.RequestException as error:
-        raise ConnectionError(ERROR_MESSAGE.format(
+        raise ConnectionError(REQUEST_ERROR.format(
             error=error, params=request_params))
     if response.status_code != HTTPStatus.OK:
-        raise HTTPError(ERROR_MESSAGE.format(
-            error=response.status_code, params=request_params))
+        raise WrongResponse(UNEXPECTED_STATUS_CODE.format(
+            code=response.status_code, params=request_params))
     response = response.json()
     for key in ('code', 'error'):
         if key in response:
-            raise ValueError(ERROR_MESSAGE.format(
-                error=f'{key}: {response[key]}', params=request_params))
+            raise WrongResponse(ERROR_MESSAGE.format(
+                key=key, value=response[key], params=request_params))
     return response
 
 
@@ -163,6 +167,7 @@ def parse_status(homework):
 
     Raises:
         KeyError: В информации о домашней работе отсутствует необходимый ключ.
+        ValueError: Неожиданный статус домашней работы в ответе API
     """
     logger.debug(PARSE_STATUS_MESSAGE)
     missing_keys = [
@@ -171,14 +176,12 @@ def parse_status(homework):
     if missing_keys:
         raise KeyError(KEY_ERROR_MESSAGE.format(
             dict='homework', key=', '.join(missing_keys)))
-    homework_name = homework['homework_name']
-    homework_status = homework['status']
-    verdict = HOMEWORK_VERDICTS.get(homework_status)
+    status = homework['status']
+    verdict = HOMEWORK_VERDICTS.get(status)
     if not verdict:
-        raise KeyError(KEY_ERROR_MESSAGE.format(
-            dict='HOMEWORK_VERDICTS', key=homework_status))
-
-    return TELEGRAM_MESSAGE.format(name=homework_name, verdict=verdict)
+        raise ValueError(UNEXPECTED_STATUS.format(status))
+    return TELEGRAM_MESSAGE.format(
+        name=homework['homework_name'], verdict=verdict)
 
 
 def main():
@@ -187,6 +190,7 @@ def main():
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     last_message = None
+    message = None
     while True:
         try:
             response = get_api_answer(timestamp)
@@ -196,27 +200,25 @@ def main():
                 message = parse_status(homeworks[0])
             else:
                 logger.debug(NO_UPDATES_MESSAGE)
-                message = NO_UPDATES_MESSAGE
         except Exception as error:
-            response = None
+            response = {}
             message = ERROR_PROGRAMM_MESSAGE.format(error)
             logger.error(message)
-        try:
-            if message != last_message:
-                send_message(bot, message)
-                last_message = message
-                if response:
-                    timestamp = response.get('current_date', timestamp)
-        except ConnectionError as error:
-            logger.error(error, exc_info=True)
         finally:
+            if message != last_message:
+                if send_message(bot, message):
+                    last_message = message
+                    timestamp = response.get('current_date', timestamp)
             time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
     logging.basicConfig(
         level=logging.DEBUG,
-        handlers=[logging.StreamHandler(sys.stdout)],
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(f'{__file__}.log')
+        ],
         format='%(asctime)s - %(levelname)s - %(message)s - %(name)s'
     )
     main()
