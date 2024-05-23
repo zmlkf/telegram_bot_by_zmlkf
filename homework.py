@@ -10,10 +10,10 @@ from dotenv import load_dotenv
 
 from exceptions import WrongResponse
 
-# Настройка логгирования
+# Logging setup
 logger = logging.getLogger(__name__)
 
-# Загрузка переменных окружения
+# Load environment variables
 load_dotenv()
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -25,36 +25,36 @@ ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 HOMEWORK_VERDICTS = {
-    'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
-    'reviewing': 'Работа взята на проверку ревьюером.',
-    'rejected': 'Работа проверена: у ревьюера есть замечания.'
+    'approved': 'The work has been reviewed: the reviewer liked everything.',
+    'reviewing': 'The work is being reviewed by the reviewer.',
+    'rejected': 'The work has been reviewed: the reviewer has comments.'
 }
 
-TOKEN_ERROR_MESSAGE = 'Переменные {} недоступны'
-TELEGRAM_MESSAGE = 'Изменился статус проверки работы "{name}". {verdict}'
-START_SEND_MESSAGE = 'Начало отправки сообщения'
-SUCCESS_SEND_MESSAGE = 'Успешная отправка сообщения: {}'
-SEND_MESSAGE_ERROR = 'Ошибка отправки сообщения {message} Ошибка: {error}'
-REQUEST_ERROR = 'Ошибка при доступе к эндпоинту: {error}. Параметры: {params}'
-UNEXPECTED_STATUS_CODE = 'Некорректный статут код: {code}. Параметры: {params}'
-ERROR_MESSAGE = ('Ошибка в ответе от сервера: {key}: {value}. '
-                 'Параметры: {params}')
-REQUEST_API_MESSAGE = 'Запрос к эндпоинту API-сервиса.'
-CHECK_RESPONSE_MESSAGE = 'Иницилизация проверки ответа сервера'
-TYPE_ERROR_MESSAGE = 'Ожидаемый тип {object}: {expected_type}. Тип: {type}'
-KEY_ERROR_MESSAGE = 'Словарь: {dict} не содержит ключ: {key}'
-UNEXPECTED_STATUS = 'Неожиданный статус домашней работы: {}'
-PARSE_STATUS_MESSAGE = 'Извлечение статуса домашней работы'
-NO_UPDATES_MESSAGE = 'Обновлений нет'
-ERROR_PROGRAMM_MESSAGE = 'Сбой в работе программы: {}'
+TOKEN_ERROR_MESSAGE = 'Environment variables {} are not available'
+TELEGRAM_MESSAGE = 'The status of the homework "{name}" has changed. {verdict}'
+START_SEND_MESSAGE = 'Starting to send message'
+SUCCESS_SEND_MESSAGE = 'Message sent successfully: {}'
+SEND_MESSAGE_ERROR = 'Error sending message {message} Error: {error}'
+REQUEST_ERROR = 'Error accessing the endpoint: {error}. Parameters: {params}'
+UNEXPECTED_STATUS_CODE = 'Unexpected status code: {code}. Parameters: {params}'
+ERROR_MESSAGE = ('Error in the server response: {key}: {value}. '
+                 'Parameters: {params}')
+REQUEST_API_MESSAGE = 'Request to the API endpoint.'
+CHECK_RESPONSE_MESSAGE = 'Initializing response validation'
+TYPE_ERROR_MESSAGE = 'Expected type {expected_type} for {object}. Got: {type}'
+KEY_ERROR_MESSAGE = 'Dictionary: {dict} does not contain key: {key}'
+UNEXPECTED_STATUS = 'Unexpected homework status: {}'
+PARSE_STATUS_MESSAGE = 'Extracting homework status'
+NO_UPDATES_MESSAGE = 'No updates'
+ERROR_PROGRAMM_MESSAGE = 'Program error: {}'
 
 
 def check_tokens():
     """
-    Проверка доступности переменных окружения.
+    Check the availability of environment variables.
 
     Raises:
-        EnvironmentError: Если переменные окружения недоступны.
+        EnvironmentError: If environment variables are not available.
     """
     unavailable_tokens = [
         token for token in TOKEN_NAMES if not globals().get(token)]
@@ -66,14 +66,14 @@ def check_tokens():
 
 def send_message(bot, message):
     """
-    Отправка сообщения через бота Telegram.
+    Send a message via the Telegram bot.
 
     Args:
-        bot: Объект бота Telegram.
-        message: Сообщение для отправки.
+        bot: Telegram bot object.
+        message: Message to be sent.
 
     Returns:
-        str: Сообщение, в случае его успешной отправки
+        str: Message, if it was successfully sent
     """
     try:
         logger.debug(START_SEND_MESSAGE)
@@ -88,17 +88,17 @@ def send_message(bot, message):
 
 def get_api_answer(timestamp):
     """
-    Выполняет запрос к эндпоинту API-сервиса и возвращает ответ в формате JSON.
+    Make a request to the API endpoint and return the response in JSON format.
 
     Args:
-        timestamp: Метка времени.
+        timestamp: Timestamp.
 
     Returns:
-        dict: Ответ от API-сервиса приведенный к типу данных Python.
+        dict: API response converted to a Python data type.
 
     Raises:
-        ConnectionError: Ошибка при доступе к эндпоинту.
-        WrongResponse: Если получен некорректный HTTP-ответ.
+        ConnectionError: Error accessing the endpoint.
+        WrongResponse: If an incorrect HTTP response is received.
     """
     request_params = {
         'url': ENDPOINT,
@@ -124,32 +124,32 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """
-    Проверяет ответ сервера на корректность.
+    Validate the server response.
 
     Args:
-        response: Ответ от сервера в формате словаря.
+        response: Server response in dictionary format.
 
     Raises:
-        TypeError: Если объект не является ожидаемым типом.
-        KeyError: Если отсутствует необходимый ключ в объекте ответа.
+        TypeError: If the object is not of the expected type.
+        KeyError: If the required key is missing in the response object.
     """
     logger.debug(CHECK_RESPONSE_MESSAGE)
     if not isinstance(response, dict):
         raise TypeError(
             TYPE_ERROR_MESSAGE.format(
                 object='response',
-                expected_type=type(dict()),
+                expected_type=dict,
                 type=type(response)
             )
         )
     if 'homeworks' not in response:
         raise KeyError(KEY_ERROR_MESSAGE.format(
-            dict='homeworks', key='homeworks'))
+            dict='response', key='homeworks'))
     if not isinstance(response['homeworks'], list):
         raise TypeError(
-            TYPE_ERROR_MESSAGE(
+            TYPE_ERROR_MESSAGE.format(
                 object='homeworks',
-                expected_type=type(list()),
+                expected_type=list,
                 type=type(response['homeworks'])
             )
         )
@@ -157,17 +157,17 @@ def check_response(response):
 
 def parse_status(homework):
     """
-    Извлекает и возвращает статус домашней работы.
+    Extract and return the status of the homework.
 
     Args:
-        homework: Информация о домашней работе в формате словаря.
+        homework: Homework information in dictionary format.
 
     Returns:
-        str: Статус домашней работы.
+        str: Homework status.
 
     Raises:
-        KeyError: В информации о домашней работе отсутствует необходимый ключ.
-        ValueError: Неожиданный статус домашней работы в ответе API
+        KeyError: Required key is missing in the homework information.
+        ValueError: Unexpected homework status in the API response.
     """
     logger.debug(PARSE_STATUS_MESSAGE)
     missing_keys = [
@@ -185,12 +185,11 @@ def parse_status(homework):
 
 
 def main():
-    """Основная логика работы бота."""
+    """Main bot logic."""
     check_tokens()
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     last_message = None
-    message = None
     while True:
         try:
             response = get_api_answer(timestamp)
@@ -198,16 +197,18 @@ def main():
             homeworks = response['homeworks']
             if homeworks:
                 message = parse_status(homeworks[0])
-                if message != last_message and send_message(bot, message):
-                    last_message = message
-                    timestamp = response.get('current_date', timestamp)
+                if message != last_message:
+                    if send_message(bot, message):
+                        last_message = message
+                        timestamp = response.get('current_date', timestamp)
             else:
                 logger.debug(NO_UPDATES_MESSAGE)
         except Exception as error:
             message = ERROR_PROGRAMM_MESSAGE.format(error)
             logger.error(message, exc_info=True)
-            if message != last_message and send_message(bot, message):
-                last_message = message
+            if message != last_message:
+                if send_message(bot, message):
+                    last_message = message
         time.sleep(RETRY_PERIOD)
 
 

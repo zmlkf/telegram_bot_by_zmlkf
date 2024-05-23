@@ -1,2 +1,2 @@
 class WrongResponse(Exception):
-    """Исключение, возникающее при некорректном HTTP-ответе."""
+    """Exception raised for an incorrect HTTP response."""
